@@ -39,9 +39,6 @@ if ($_GET["type"] == "pretty") {
   echo "<pre>";
   echo htmlspecialchars(json_encode($data,JSON_PRETTY_PRINT));
   echo "</pre>";
-  ?>
-
-  <?
 } else {
   header('Content-Type: application/json');
   echo json_encode($data);
