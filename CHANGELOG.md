@@ -1,5 +1,25 @@
 # Changelog
 
+## 2.5
+
+- Show specific endpoint picker when multiple A/AAAA records exist.
+- Add support for testing specific IP's with specific hostnames (instead of what DNS says)
+
+## 2.4
+
+- Add SSL Compressio check
+- Add Heartbleed test (requires python2)
+- Add some tooltips for topics
+
+## 2.3
+
+- Add warning if certificate expires in < 30 days.
+
+## 2.2
+
+- Add SSLv2 test
+- Fix long duration and possible timeout on non-http(s) tests
+
 ## 2.1
 
 - Add json API endpoint (see README).
