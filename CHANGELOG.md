@@ -1,5 +1,41 @@
 # Changelog
 
+## 2.7
+
+- Add debian weak keys check.
+- Add Lets Encrypt Signing certs: https://letsencrypt.org/2015/06/04/isrg-ca-certs.html
+- Check heartbeat extension.
+- Set title based on check.
+- Reset warning count in menu correctly.
+- Remove spaces from json variable names.
+
+## 2.6
+
+- Fix testing of IPv6 only hosts.
+- Fix correct reverse DNS lookup for IPv6.
+- Don't test OCSP stapling, TLS_FALLBACK_SCSV and SSL Compression on IPv6 hosts because of bugs in OpenSSL's tools (https://rt.openssl.org/Ticket/Display.html?id=1365&user=guest&pass=guest). Don't give invalid test results, instead, give user a warning about it.
+- Add host header to get_headers function (fix #35).
+
+## 2.5
+
+- Show specific endpoint picker when multiple A/AAAA records exist.
+- Add support for testing specific IP's with specific hostnames (instead of what DNS says)
+
+## 2.4
+
+- Add SSL Compressio check
+- Add Heartbleed test (requires python2)
+- Add some tooltips for topics
+
+## 2.3
+
+- Add warning if certificate expires in < 30 days.
+
+## 2.2
+
+- Add SSLv2 test
+- Fix long duration and possible timeout on non-http(s) tests
+
 ## 2.1
 
 - Add json API endpoint (see README).

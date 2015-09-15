@@ -12,7 +12,7 @@ Simple PHP script which decodes an SSL connection and/or certificate and display
 * JSON API
 * Fast.
 
-### Features
+## Features
 
 - Connection information
 - Decodes CSR
@@ -31,23 +31,44 @@ Simple PHP script which decodes an SSL connection and/or certificate and display
 - Date validation
 - JSON API
 - Warnings for bad connection settings or certificate options
+- Heartbleed test
+- SNI specific testing
 
-### Requirements
+## Requirements
 
 - PHP 5.6+
 - OpenSSL
 - PHP must allow shell_exec and remote fopen.
+- Debian: `php-intl` package installed.
 
-### Installation
+For the heartbleed test `python2` and `python-netaddr` are required.
+
+## Installation
 
 Unpack and go!
 
     cd /var/www
     git clone https://github.com/RaymiiOrg/ssl-decoder.git
+    chown $wwwuser ssl-decoder/results/
 
 Browse to https://your-server/ssl-decoder.
 
-### Demo
+The default timeout for checks is 2 seconds. If this is to fast for your internal services, this can be raised in the `variables.php` file.
+
+### OpenSSL compilation
+
+If you want to use the latest OpenSSL and your distro doesn't ship with it, you can compile your own OpenSSL and replace the system one. Do note that this might break stuff.
+
+    cd /usr/local/src
+    wget https://openssl.org/source/openssl-1.0.2.tar.gz
+    tar -xf openssl-1.0.2.tar.gz
+    cd openssl-1.0.2
+    ./config --prefix=/usr --openssldir=/usr/local/openssl shared zlib
+    make
+    make test
+    make install
+
+## Demo
 
 See [https://tls.so](https://tls.so).
 
@@ -67,11 +88,10 @@ The SSL Decoder includes Piwik Javascript tracking code. If you self host it, yo
 Endpoint: `/json.php`. 
 
 
-
 Accepts: 
 - CSR 
 - Certificate 
-- Host (+port, default 443)
+- Host:ip (+port, default 443)
 
 Returns JSON UTF-8 encoded certificate (and connection) data. 
 
@@ -260,7 +280,7 @@ Example Response:
 
 Params:
 
-    - `host` = Hostname or IP address
+    - `host:ip` = Hostname:IP address
     - `port` = port to test (443, 993, 465, 8443 etc). 
     - ciphersuites = 1 to enumerate ciphersuites supported by the tested server. Takes longer. If not specified or not 1, ciphersuites will not be tested, used ciphersuite will be reported.
 

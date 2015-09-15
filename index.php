@@ -30,7 +30,7 @@ foreach (glob("functions/*.php") as $filename) {
   <meta http-equiv="X-UA-Compatible" content="IE=edge">
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>SSL Decoder</title>
+  <title>SSL Decoder</title>  
   <link rel="stylesheet" href="<?php echo(htmlspecialchars($current_folder)); ?>css/bootstrap.min.css">
   <link rel="stylesheet" href="<?php echo(htmlspecialchars($current_folder)); ?>css/ssl.css">
   <script src="<?php echo(htmlspecialchars($current_folder)); ?>js/jquery.min.js"></script> 
@@ -45,17 +45,17 @@ foreach (glob("functions/*.php") as $filename) {
     echo '<div id="wrapper">';
     $data = [];
     $hostname = mb_strtolower(get($_GET['host']));
-    $host = parse_hostname($hostname);
-    if ($host['port']) {
-      $port = $host['port'];
-    } else {
-      $port = get($_GET['port'], '443');
-    }
-    $host = $host['hostname'];
+    $hostname = parse_hostname($hostname);
+    $host = $hostname['hostname'];
+    $port = get($_GET['port'], '443');
     if ( !is_numeric($port) ) {
       $port = 443;
     }
-    $data["data"] = check_json($host,$port);
+    if ($hostname['multiple_ip']) {
+      choose_endpoint($hostname['multiple_ip'], $host, $port, $_GET['ciphersuites']);
+    } 
+    $ip = $hostname['ip'];
+    $data["data"] = check_json($host,$ip,$port);
     if(isset($data["data"]["error"])) {
       $data["error"] = $data["data"]["error"];
       unset($data["data"]);
@@ -79,17 +79,19 @@ foreach (glob("functions/*.php") as $filename) {
             $warntxt = " <sup>(<strong>".htmlspecialchars(count(array_unique($data["data"]["connection"]["warning"])))."</strong>)</sup>";
           }
         ?>
-        <li><a href="#conndata"><strong>0</strong>: Connection Data <?php echo $warntxt; ?></a></li>
+        <li><a href="#conndata"><strong>0</strong>: Connection Data <?php echo $warntxt; $warntxt = ''; ?></a></li>
         <?php
         foreach ($chain_data as $key => $value) {
           if (count($value['warning']) >= 1) {
             $warntxt = " <sup>(<strong>".htmlspecialchars(count($value['warning']))."</strong>)</sup>";
           }
           echo "<li><a href='#cert".(string)$key."'><strong>".$key."</strong> : ". htmlspecialchars($value["cert_data"]["subject"]["CN"]) . $warntxt . "</a></li>";
+          $warntxt = "";
         }
         ?>
         <li><a href="<?php echo(htmlspecialchars($current_folder)); ?>">Try another website</a></li>
         <li><hr></li>
+        <li><a href="https://certificatemonitor.org/">Certificate Expiry Monitor</a></li>
         <li><a href="https://cipherli.st/">Strong Cipherlists</a></li>
         <li><a href="https://raymii.org/s/tutorials/Strong_SSL_Security_On_Apache2.html">Apache SSL Tutorial</a></li>
         <li><a href="https://raymii.org/s/tutorials/Strong_SSL_Security_On_nginx.html">NGINX SSL Tutorial</a></li>
@@ -127,27 +129,33 @@ foreach (glob("functions/*.php") as $filename) {
     }
   
     if ( !empty($host) ) {
-      echo "<p><strong>This tool does not make conclusions. Please check the data and define the validity yourself!</strong></p>";
       if ( !empty($data["error"]) ) {
         echo "<span class='text-danger'>" . htmlspecialchars($data["error"][0]) . "</span>";
         echo "<hr>";
         $write_cache = 0;
       } else {
+
         $hostfilename = preg_replace("([^\w\s\d\-_~,;:\[\]\(\).])", '', $host);
         $hostfilename = preg_replace("([\.]{2,})", '', $host);
         $hostfilename = preg_replace("([^a-z0-9])", '', $host);
         $cache_filename = (string) "results/saved." . $hostfilename . "." . $epoch . "." . $random_bla . ".html";
         $cache_filename_json = (string) "results/saved." . $hostfilename . "." . $epoch . "." . $random_bla . ".json";
 
+        echo "<p><strong>This tool does not make conclusions. Please check the data and define the validity yourself!</strong></p>";
+
         if ($write_cache == 1) {
-          echo "This result is saved at most 60 days on <a href=\"";
+          echo "<p>This result is saved at most 60 days on <a href=\"";
           echo(htmlspecialchars($current_folder) . $cache_filename); 
-          echo "\">the following URL</a>. Do note that this might be deleted earlier if space runs out.";
+          echo "\">the following URL</a>. Do note that this might be deleted earlier if space runs out.<br></p>";
         }
+
+        echo "<script type='text/javascript'>document.title = \"" . htmlspecialchars($host) . ":" . htmlspecialchars($port) . " - SSL Decoder \"</script>";
+
+        echo "<p>Receive notifications when this certificate is about to expire with my other service, <a href='https://certificatemonitor.org/'>Certificate Monitor</a>.</p>";
 
         // connection data
         echo "<div class='content'><section id='conndata'>";
-        echo "<header><h2>Connection Data for " . htmlspecialchars($host) . "</h2></header>";
+        echo "<header><h2>Connection Data for " . htmlspecialchars($host) . " / " . htmlspecialchars($ip) . "</h2></header>";
         ssl_conn_metadata($data["data"]["connection"]);
         echo "</section></div>";
 
@@ -184,14 +192,10 @@ foreach (glob("functions/*.php") as $filename) {
     }
   }
 
-  
-  
-  ?>
-     </div>
-    </div>
-  </div>
+  echo "</div>";
+  echo "</div>";
+  echo "</div>";
 
-<?php
 require_once("inc/footer.php");
 
 if ($write_cache == 1) {
