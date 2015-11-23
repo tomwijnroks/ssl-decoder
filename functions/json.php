@@ -14,9 +14,12 @@
 // You should have received a copy of the GNU Affero General Public License
 // along with this program.  If not, see <http://www.gnu.org/licenses/>.
 
-
-function check_json($host,$ip,$port) {
+function check_json($host,$ip,$port,$fastcheck=0) {
   global $timeout;
+  global $max_chain_length;
+  global $ct_urls;
+  $old_error_reporting = error_reporting();
+  error_reporting(0);
   $data = [];
   $stream = stream_context_create (array("ssl" => 
     array("capture_peer_cert" => true,
@@ -42,7 +45,7 @@ function check_json($host,$ip,$port) {
     $cert_data = openssl_x509_parse($context["options"]["ssl"]["peer_certificate"]);
     $chain_data = $context["options"]["ssl"]["peer_certificate_chain"];
     $chain_length = count($chain_data);
-    if (isset($chain_data) && $chain_length < 10) {
+    if (isset($chain_data) && $chain_length < $max_chain_length) {
       $chain_length = count($chain_data);
       $chain_arr_keys  = ($chain_data);
       foreach(array_keys($chain_arr_keys) as $key) {
@@ -50,11 +53,27 @@ function check_json($host,$ip,$port) {
         $next = $chain_data[$key+1];
         $prev = $chain_data[$key-1];
         $chain_key = (string)$key+1;
+        $include_chain = false;
         if ($key == 0) {
-          $data["connection"] = ssl_conn_metadata_json($host, $ip, $port, $read_stream, $chain_data);
-          $data["chain"][$chain_key] = cert_parse_json($curr, $next, $host, $ip, true);
+          $data["connection"] = ssl_conn_metadata_json($host, $ip, $port, $read_stream, $chain_data, $fastcheck);
+          $data["chain"][$chain_key] = cert_parse_json($curr, $next, $host, true, $port, $include_chain);
         } else {
-          $data["chain"][$chain_key] = cert_parse_json($curr, $next, null, false);
+          $data["chain"][$chain_key] = cert_parse_json($curr, $next, null, false, $port, $include_chain);
+        }
+        // certificate transparency
+        $data["certificate_transparency"] = [];
+        if($fastcheck == 0) {
+          foreach ($ct_urls as $ct_url) {
+            $submitToCT = submitCertToCT($data["chain"], $ct_url);
+            $ct_result = json_decode($submitToCT, TRUE);
+            if ($ct_result === null
+              && json_last_error() !== JSON_ERROR_NONE) {
+              $result_ct = array('result' => $submitToCT);
+              $data["certificate_transparency"][$ct_url] = $result_ct;
+            } else {
+             $data["certificate_transparency"][$ct_url] = $ct_result;
+            }
+          }
         }
       } 
     } else {
@@ -62,6 +81,7 @@ function check_json($host,$ip,$port) {
       return $data;
     }
   }
+  error_reporting($old_error_reporting);
   return $data;
 }
 
