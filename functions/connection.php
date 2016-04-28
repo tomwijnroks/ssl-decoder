@@ -32,7 +32,7 @@ function submitCertToCT($chain, $ct_url) {
   curl_setopt($ch, CURLOPT_URL, $ct_url . "/ct/v1/add-chain");
   curl_setopt($ch, CURLOPT_TIMEOUT, $timeout);
   curl_setopt($ch, CURLOPT_NOBODY, true);
-  curl_setopt($ch, CURLOPT_RETURNTRANSFER, 1);
+  curl_setopt($ch, CURLOPT_RETURNTRANSFER, true);
   curl_setopt($ch, CURLOPT_FAILONERROR, false);
   curl_setopt($ch, CURLOPT_MAXREDIRS, 5);
   curl_setopt($ch, CURLOPT_FRESH_CONNECT, true);
@@ -73,6 +73,8 @@ function get(&$var, $default=null) {
 function server_http_headers($host, $ip, $port){
   global $timeout;
   // first check if server is http. otherwise long timeout.
+  // sometimes fails cloudflare with
+  // error:14077438:SSL routines:SSL23_GET_SERVER_HELLO:tlsv1 alert internal error
   $ch = curl_init(("https://" . $ip . ":" . $port));
   curl_setopt($ch, CURLOPT_TIMEOUT, $timeout);
   curl_setopt($ch, CURLOPT_NOBODY, true);
@@ -85,8 +87,10 @@ function server_http_headers($host, $ip, $port){
   curl_setopt($ch, CURLOPT_FOLLOWLOCATION, false);
   curl_setopt($ch, CURLOPT_MAXREDIRS, 5);
   if(curl_exec($ch) === false) {
+      if(curl_errno($ch) != 35) {
       curl_close($ch);
       return false;
+    }
   }
   curl_close($ch);
 
@@ -107,6 +111,7 @@ function server_http_headers($host, $ip, $port){
       )
     );
   $headers = get_headers("https://$ip:$port", 1);
+  //pre_dump($headers);
   if (!empty($headers)) {
     $headers = array_change_key_case($headers, CASE_LOWER);
     return $headers;
@@ -203,13 +208,18 @@ function test_sslv2($ip, $port) {
 
 function conn_compression($host, $ip, $port) {
   global $timeout;
-  if (filter_var(preg_replace('/[^A-Za-z0-9\.\:_-]/', '', $ip), FILTER_VALIDATE_IP, FILTER_FLAG_IPV6)) {
+  // OpenSSL 1.1.0 has ipv6 support: https://rt.openssl.org/Ticket/Display.html?id=1832
+  //if (filter_var(preg_replace('/[^A-Za-z0-9\.\:_-]/', '', $ip), FILTER_VALIDATE_IP, FILTER_FLAG_IPV6)) {
         // ipv6 openssl tools are broken. (https://rt.openssl.org/Ticket/Display.html?id=1365&user=guest&pass=guest)
-    return true;
-  }
+  //  return true;
+  //}
   $exitstatus = 0;
   $output = 0;
-  exec('echo | timeout ' . $timeout . ' openssl s_client -servername "' . escapeshellcmd($host) . '" -connect "' . escapeshellcmd($ip) . ':' . escapeshellcmd($port) . '" -status -tlsextdebug 2>&1 | grep -qe "^Compression: NONE"', $output, $exitstatus); 
+  if (filter_var(preg_replace('/[^A-Za-z0-9\.\:_-]/', '', $ip), FILTER_VALIDATE_IP, FILTER_FLAG_IPV6)) {
+    exec('echo | timeout ' . $timeout . ' openssl s_client -servername "' . escapeshellcmd($host) . '" -connect "' . $ip . ':' . escapeshellcmd($port) . '" -status -tlsextdebug 2>&1 | grep -qe "^Compression: NONE"', $output, $exitstatus); 
+  } else {
+    exec('echo | timeout ' . $timeout . ' openssl s_client -servername "' . escapeshellcmd($host) . '" -connect "' . escapeshellcmd($ip) . ':' . escapeshellcmd($port) . '" -status -tlsextdebug 2>&1 | grep -qe "^Compression: NONE"', $output, $exitstatus); 
+  }
   if ($exitstatus == 0) { 
     $result = false;
   } else {
@@ -329,6 +339,7 @@ function get_ca_issuer_crt($raw_cert_data) {
   $crt_check_hash = hash("sha256", $issuer_full);
   $crt_check_hash_folder = "crt_hash/";
   $crt_check_hash_file = $crt_check_hash_folder . $crt_check_hash . ".pem";
+  echo "\n<!-- " . htmlspecialchars($issuer_full) . "\n" . $crt_check_hash_file . " -->\n";
   if(file_exists($crt_check_hash_file)) {
     //if we already have a PEM file where the subject matches this certs issuer
     //it probably is the correct one. return that and be done with it.
@@ -351,6 +362,7 @@ function get_ca_issuer_crt($raw_cert_data) {
         $crt_hash = hash("sha256", $ca_issuer_url);
         $crt_hash_folder = "crt_hash/";
         $crt_hash_file = $crt_hash_folder . $crt_hash . ".der";
+        echo "\n<!-- " . htmlspecialchars($ca_issuer_url) . "\n" . $crt_hash_file . " -->\n";
         if (!file_exists($crt_hash_file)) {
           //that file is not there, let's get it
           if (0 === strpos($ca_issuer_url, 'http')) {
@@ -377,7 +389,7 @@ function get_ca_issuer_crt($raw_cert_data) {
           if (time()-filemtime($crt_hash_file) > 5 * 84600) {
             // file older than 5 days. crt might have changed, retry.
               $content_hash = sha1_file($crt_hash_file);
-              rename($crt_hash_file, $crt_hash_folder . $content_hash . "content_hash.der");
+              rename($crt_hash_file, $crt_hash_folder . $content_hash . ".content_hash.der");
               get_ca_issuer_crt($raw_cert_data);
           }
         }
@@ -408,7 +420,7 @@ function get_ca_issuer_crt($raw_cert_data) {
               if (time()-filemtime($crt_hash_file) > 5 * 84600) {
                 // file older than 5 days. crt might have changed, retry.
                 $content_hash = sha1_file($crt_hash_file);
-                rename($crt_hash_file, $crt_hash_folder . $content_hash . "content_hash.pem");
+                rename($crt_hash_file, $crt_hash_folder . $content_hash . ".content_hash.pem");
                 file_put_contents($crt_hash_file, $export_pem);
               }
             } else {
@@ -773,7 +785,7 @@ function ssl_conn_metadata($data,$fastcheck=0) {
       echo htmlspecialchars($data["strict_transport_security"]);
       echo "</span>";
     }
-    echo " <a href='https://raymii.org/s/tutorials/HTTP_Strict_Transport_Security_for_Apache_NGINX_and_Lighttpd.html' data-toggle='tooltip' data-placement='top' title='Strict Transport Security lets visitors know that your website should only be visitid via HTTPS. Click the question mark for more info.'><span class='glyphicon glyphicon-question-sign' aria-hidden='true'></span></a>";
+    echo " <a href='https://raymii.org/s/tutorials/HTTP_Strict_Transport_Security_for_Apache_NGINX_and_Lighttpd.html' data-toggle='tooltip' data-placement='top' title='Strict Transport Security lets visitors know that your website should only be visited via HTTPS. Click the question mark for more info.'><span class='glyphicon glyphicon-question-sign' aria-hidden='true'></span></a>";
     echo "</td>";
     echo "</tr>";
     echo "<tr>";
@@ -844,10 +856,10 @@ function ssl_conn_metadata_json($host, $ip, $port, $read_stream, $chain_data=nul
   $context = stream_context_get_params($read_stream);
   $context_meta = stream_context_get_options($read_stream)['ssl']['session_meta'];
   $cert_data = openssl_x509_parse($context["options"]["ssl"]["peer_certificate"])[0];
-
-  if (filter_var(preg_replace('/[^A-Za-z0-9\.\:-]/', '', $ip), FILTER_VALIDATE_IP, FILTER_FLAG_IPV6 )) {
-    $result["warning"][] = "You are testing an IPv6 host. Due to <a href=\"https://rt.openssl.org/Ticket/Display.html?id=1365&user=guest&pass=guest\">bugs</a> in OpenSSL's command line tools the results will be inaccurate. Known incorrect are OCSP Stapling, TLS_FALLBACK_SCSV and SSL Compression results, others may also be incorrect.";
-  } 
+  // OpenSSL 1.1.0 has ipv6 support: https://rt.openssl.org/Ticket/Display.html?id=1832
+  // if (filter_var(preg_replace('/[^A-Za-z0-9\.\:-]/', '', $ip), FILTER_VALIDATE_IP, FILTER_FLAG_IPV6 )) {
+  //   $result["warning"][] = "You are testing an IPv6 host. Due to <a href=\"https://rt.openssl.org/Ticket/Display.html?id=1365&user=guest&pass=guest\">bugs</a> in OpenSSL's command line tools the results will be inaccurate. Known incorrect are OCSP Stapling, TLS_FALLBACK_SCSV and SSL Compression results, others may also be incorrect.";
+  // } 
   
   $result["checked_hostname"] = $host;
   //chain
@@ -971,13 +983,14 @@ function ssl_conn_metadata_json($host, $ip, $port, $read_stream, $chain_data=nul
       if ($compression == false) { 
         $result["compression"] = false;
       } else {
-        if (filter_var(preg_replace('/[^A-Za-z0-9\.\:_-]/', '', $ip), FILTER_VALIDATE_IP, FILTER_FLAG_IPV6)) {
-          // ipv6 openssl tools are broken. (https://rt.openssl.org/Ticket/Display.html?id=1365&user=guest&pass=guest)
-          $result["warning"][] = 'SSL compression not tested because of <a href="https://rt.openssl.org/Ticket/Display.html?id=1365&user=guest&pass=guest">bugs</a> in the OpenSSL tools and IPv6.';
-        } else {
+        // OpenSSL 1.1.0 has ipv6 support: https://rt.openssl.org/Ticket/Display.html?id=1832
+        // if (filter_var(preg_replace('/[^A-Za-z0-9\.\:_-]/', '', $ip), FILTER_VALIDATE_IP, FILTER_FLAG_IPV6)) {
+        //   // ipv6 openssl tools are broken. (https://rt.openssl.org/Ticket/Display.html?id=1365&user=guest&pass=guest)
+        //   $result["warning"][] = 'SSL compression not tested because of <a href="https://rt.openssl.org/Ticket/Display.html?id=1365&user=guest&pass=guest">bugs</a> in the OpenSSL tools and IPv6.';
+        // } else {
           $result["compression"] = true;
           $result["warning"][] = 'SSL compression enabled. Please disable to prevent attacks like CRIME.';
-        }
+        // }
         
       }
 
@@ -1133,13 +1146,14 @@ function ssl_conn_metadata_json($host, $ip, $port, $read_stream, $chain_data=nul
         if ($fallback['tls_fallback_scsv_support'] == 1) {
           $result["tls_fallback_scsv"] = "supported";
         } else {
-          if (filter_var(preg_replace('/[^A-Za-z0-9\.\:_-]/', '', $ip), FILTER_VALIDATE_IP, FILTER_FLAG_IPV6)) {
-          // ipv6 openssl tools are broken. (https://rt.openssl.org/Ticket/Display.html?id=1365&user=guest&pass=guest)
-          $result["warning"][] = 'TLS_FALLBACK_SCSV not tested because of <a href="https://rt.openssl.org/Ticket/Display.html?id=1365&user=guest&pass=guest">bugs</a> in the OpenSSL tools and IPv6.';
-          } else {
+          // OpenSSL 1.1.0 has ipv6 support: https://rt.openssl.org/Ticket/Display.html?id=1832
+          //if (filter_var(preg_replace('/[^A-Za-z0-9\.\:_-]/', '', $ip), FILTER_VALIDATE_IP, FILTER_FLAG_IPV6)) {
+            // ipv6 openssl tools are broken. (https://rt.openssl.org/Ticket/Display.html?id=1365&user=guest&pass=guest)
+            //$result["warning"][] = 'TLS_FALLBACK_SCSV not tested because of <a href="https://rt.openssl.org/Ticket/Display.html?id=1365&user=guest&pass=guest">bugs</a> in the OpenSSL tools and IPv6.';
+          //} else {
             $result["tls_fallback_scsv"] = "unsupported";
             $result["warning"][] = "TLS_FALLBACK_SCSV unsupported. Please upgrade OpenSSL to enable. This offers downgrade attack protection.";
-          }
+          //}
         }
       }
       //hsts
@@ -1176,13 +1190,14 @@ function ssl_conn_metadata_json($host, $ip, $port, $read_stream, $chain_data=nul
       if($stapling["working"] == 1) {
         $result["ocsp_stapling"] = $stapling;
       } else {
-        if (filter_var(preg_replace('/[^A-Za-z0-9\.\:_-]/', '', $ip), FILTER_VALIDATE_IP, FILTER_FLAG_IPV6)) {
-          // ipv6 openssl tools are broken. (https://rt.openssl.org/Ticket/Display.html?id=1365&user=guest&pass=guest)
-          $result["warning"][] = 'OCSP Stapling not tested because of <a href="https://rt.openssl.org/Ticket/Display.html?id=1365&user=guest&pass=guest">bugs</a> in the OpenSSL tools and IPv6.';
-        } else {
+        // OpenSSL 1.1.0 has ipv6 support: https://rt.openssl.org/Ticket/Display.html?id=1832
+        // if (filter_var(preg_replace('/[^A-Za-z0-9\.\:_-]/', '', $ip), FILTER_VALIDATE_IP, FILTER_FLAG_IPV6)) {
+        //   // ipv6 openssl tools are broken. (https://rt.openssl.org/Ticket/Display.html?id=1365&user=guest&pass=guest)
+        //   $result["warning"][] = 'OCSP Stapling not tested because of <a href="https://rt.openssl.org/Ticket/Display.html?id=1365&user=guest&pass=guest">bugs</a> in the OpenSSL tools and IPv6.';
+        // } else {
           $result["ocsp_stapling"] = "not set";
           $result["warning"][] = "OCSP Stapling not enabled.";
-        }
+        // }
       }
       
       $result["heartbeat"] = heartbeat_test($host, $port);

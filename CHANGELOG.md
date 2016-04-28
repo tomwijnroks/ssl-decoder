@@ -1,5 +1,23 @@
 # Changelog
 
+## 3.2
+
+- Add support for PHP 7.
+- Add support for OpenSSL 1.1.0
+- OpenSSL 1.1 has full IPv6 support in the CLI tools. Therefore the following checks work and the warnings are removed:
+  - OCSP stapling check
+  - TLS_FALLBACK_SCSV 
+  - SSL Compression 
+- Add Dockerfile to set up a dev environment or self hosted instance very fast, since OpenSSL 1.1.0 is now a requirement and not every server will have that right now.
+
+
+## 3.1
+
+- Fix HTTP header resolution in some cloudflare cases (HSTS/HPKP)
+- Fix some small typo's
+- Add introduction text
+- Add input types to form for mobile devices
+
 ## 3.0
 
 - Add chain reconstruction. If a chain is wrong or incomplete, we construct the correct chain based on earlier checks and the AuthorityInfoAccess extension.
