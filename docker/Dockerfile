@@ -24,9 +24,9 @@ RUN apt-get update && apt-get install -y \
     && docker-php-ext-install -j$(nproc) gd \
     && mkdir -p /usr/local/src \
     && cd /usr/local/src \
-    && wget https://openssl.org/source/openssl-1.1.0-pre4.tar.gz \
-    && tar -xf openssl-1.1.0-pre4.tar.gz \
-    && cd openssl-1.1.0-pre4 \
+    && wget https://openssl.org/source/openssl-1.1.0-pre5.tar.gz \
+    && tar -xf openssl-1.1.0-pre5.tar.gz \
+    && cd openssl-1.1.0-pre5 \
     && ./config --prefix=/usr/local no-afalgeng \
     && make \
     && make install 
